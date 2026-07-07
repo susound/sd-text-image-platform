@@ -12,6 +12,16 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 文生图核心Provider —— 本地GPU推理
+ *
+ * <p>通过 OkHttp 调用 Python 推理服务 POST /generate，使用 diffusers + Stable Diffusion
+ * 在本地 GPU (RTX 4060 8GB) 上执行 fp16 文生图推理。支持多模型切换、LoRA 注入、
+ * 实时进度回调。</p>
+ *
+ * @author 沈元琦
+ * @since 2026-05
+ */
 @Slf4j
 @Component
 public class LocalModelText2ImageProvider implements Text2ImageProvider {
