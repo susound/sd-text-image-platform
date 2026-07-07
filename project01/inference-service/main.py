@@ -1,3 +1,13 @@
+"""
+推理服务 —— 本地 GPU 文生图推理引擎
+
+通过 FastAPI 提供 Stable Diffusion 文生图推理，加载本地 .safetensors 模型，
+支持多模型切换、LoRA 注入、实时进度回调。
+
+@author 赵浩宇
+@since 2026-05
+"""
+
 import os
 import io
 import glob
