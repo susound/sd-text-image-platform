@@ -13,6 +13,16 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 用户管理与认证控制器
+ *
+ * <p>提供注册、登录、JWT令牌发放、用户信息查询、用户列表管理等接口。
+ * 集成 Spring Security + JWT，支持 USER / DESIGNER / ADMIN 三种角色
+ * 的路由级权限控制。</p>
+ *
+ * @author 姚朕言
+ * @since 2026-05
+ */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
