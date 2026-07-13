@@ -16,8 +16,9 @@ from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler, EulerDiscreteScheduler, \
-    EulerAncestralDiscreteScheduler, DDIMScheduler, UniPCMultistepScheduler
+import safetensors
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline, DPMSolverMultistepScheduler, \
+    EulerDiscreteScheduler, EulerAncestralDiscreteScheduler, DDIMScheduler, UniPCMultistepScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -96,6 +97,29 @@ def scan_models():
     return models
 
 
+def _detect_model_type(model_path: str) -> str:
+    """Detect model architecture from checkpoint file.
+    Returns 'sdxl' for SDXL/SSD-1B (conditioner prefix), 'sd15' for SD 1.5."""
+    try:
+        sd = safetensors.torch.load_file(model_path, device="cpu")
+        # SDXL/SSD-1B checkpoints use 'conditioner' prefix for text encoders
+        for k in sd:
+            if k.startswith("conditioner."):
+                return "sdxl"
+        return "sd15"
+    except Exception:
+        return "sd15"
+
+
+def _configure_sdxl_pipeline(pipe):
+    """Apply memory optimizations for SDXL on 8GB VRAM."""
+    pipe.enable_sequential_cpu_offload()
+    pipe.enable_attention_slicing("max")
+    pipe.enable_vae_slicing()
+    pipe.enable_vae_tiling()
+    logger.info("Applied SDXL memory optimizations (sequential offload + VAE tiling)")
+
+
 def get_pipeline(checkpoint_name: Optional[str]):
     global current_pipeline, current_checkpoint
 
@@ -125,29 +149,45 @@ def get_pipeline(checkpoint_name: Optional[str]):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
+        model_type = _detect_model_type(target_model.path)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
 
-        try:
-            pipe = StableDiffusionPipeline.from_single_file(
+        if model_type == "sdxl":
+            logger.info(f"Detected SDXL/SSD-1B model, using StableDiffusionXLPipeline")
+            pipe = StableDiffusionXLPipeline.from_single_file(
                 target_model.path,
                 torch_dtype=dtype,
                 safety_checker=None,
                 requires_safety_checker=False,
             )
-        except Exception as e:
-            logger.warning(f"First load attempt failed ({e}), retrying with hub download...")
-            pipe = StableDiffusionPipeline.from_single_file(
-                target_model.path,
-                torch_dtype=dtype,
-                safety_checker=None,
-                requires_safety_checker=False,
-                local_files_only=False,
-            )
-        pipe = pipe.to(device)
+            _configure_sdxl_pipeline(pipe)
+        else:
+            logger.info(f"Detected SD 1.5 model, using StableDiffusionPipeline")
+            try:
+                pipe = StableDiffusionPipeline.from_single_file(
+                    target_model.path,
+                    torch_dtype=dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False,
+                )
+            except Exception as e:
+                logger.warning(f"First load attempt failed ({e}), retrying with hub download...")
+                pipe = StableDiffusionPipeline.from_single_file(
+                    target_model.path,
+                    torch_dtype=dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False,
+                    local_files_only=False,
+                )
+            pipe = pipe.to(device)
+            if device == "cuda":
+                pipe.enable_attention_slicing()
 
-        if device == "cuda":
-            pipe.enable_attention_slicing()
+            # Fix: from_single_file may misidentify SD 1.5 as SDXL
+            if getattr(pipe.unet.config, "addition_embed_type", None) == "text_time":
+                pipe.unet.config.addition_embed_type = None
+                logger.info("Fixed UNet addition_embed_type: text_time -> None (SD 1.5 compat)")
 
         current_pipeline = pipe
         current_checkpoint = target_model.path
@@ -245,7 +285,8 @@ def generate(req: GenerateRequest):
                 pipe.scheduler = scheduler
 
         actual_seed = req.seed if req.seed is not None else int(time.time_ns()) % (2**31)
-        generator = torch.Generator(device=pipe.device).manual_seed(actual_seed)
+        gen_device = "cuda" if torch.cuda.is_available() else "cpu"
+        generator = torch.Generator(device=gen_device).manual_seed(actual_seed)
 
         generate_kwargs = dict(
             prompt=req.prompt,
@@ -277,6 +318,7 @@ def generate(req: GenerateRequest):
                     "its": its,
                     "finished": False
                 }
+                return callback_kwargs
 
             generate_kwargs["callback_on_step_end"] = callback_on_step_end
 
