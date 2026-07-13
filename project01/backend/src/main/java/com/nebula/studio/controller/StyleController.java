@@ -14,6 +14,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 风格管理与系统配置控制器
+ *
+ * <p>提供风格模板的增删改查、系统配置管理（千问API Key、模型参数等）、
+ * 审计日志查询等接口。支持 USER / DESIGNER / ADMIN 三级权限。</p>
+ *
+ * @author 李冰杰
+ * @since 2026-05
+ */
 @RestController
 @RequestMapping("/api/styles")
 @RequiredArgsConstructor

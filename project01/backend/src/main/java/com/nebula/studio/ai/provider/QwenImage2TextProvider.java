@@ -13,6 +13,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 图生文Provider —— 千问 Qwen3.5-Omni-Plus API
+ *
+ * <p>通过 DashScope 兼容模式 API 实现图片分析，返回结构化 JSON
+ * （description / tags / style / prompt）。上传图片 → base64 → 调用千问
+ *  多模态大模型 → JSON 分析结果。</p>
+ *
+ * @author 王诚俊
+ * @since 2026-05
+ */
 @Slf4j
 @Component
 public class QwenImage2TextProvider implements Image2TextProvider {
