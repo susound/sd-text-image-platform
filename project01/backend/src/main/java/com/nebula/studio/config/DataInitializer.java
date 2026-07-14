@@ -77,8 +77,7 @@ public class DataInitializer implements CommandLineRunner {
         List<String> keys = List.of("app.name", "app.version",
                 "ai.local-model.api-url", "ai.local-model.model-dir",
                 "ai.qwen.api-key", "ai.qwen.api-url", "ai.qwen.model",
-                "storage.minio.url", "storage.minio.bucket",
-                "security.jwt.expire-hours", "training.default.epochs", "training.default.batch-size");
+                "security.jwt.expire-hours");
 
         List<String[]> configs = List.of(
                 new String[]{"app.name", "文图互转主题设计系统", "系统名称"},
@@ -88,11 +87,7 @@ public class DataInitializer implements CommandLineRunner {
                 new String[]{"ai.qwen.api-key", "", "千问 API Key"},
                 new String[]{"ai.qwen.api-url", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "千问 API 地址"},
                 new String[]{"ai.qwen.model", "qwen3.5-omni-plus", "千问 模型名称"},
-                new String[]{"storage.minio.url", "http://localhost:9000", "MinIO存储地址"},
-                new String[]{"storage.minio.bucket", "ai-content", "MinIO存储桶名称"},
-                new String[]{"security.jwt.expire-hours", "24", "JWT过期时间(小时)"},
-                new String[]{"training.default.epochs", "10", "默认训练轮数"},
-                new String[]{"training.default.batch-size", "8", "默认批次大小"}
+                new String[]{"security.jwt.expire-hours", "24", "JWT过期时间(小时)"}
         );
 
         java.util.Set<String> existingKeys = new java.util.HashSet<>();

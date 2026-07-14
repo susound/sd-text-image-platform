@@ -128,7 +128,10 @@ async function fetchData() {
   try {
     const res = await getStyleList({ page: 1, size: 100 })
     styles.value = res.data.records || []
-  } catch {} finally {
+  } catch (e) {
+    console.error('加载风格列表失败:', e)
+    ElMessage.error('加载风格列表失败')
+  } finally {
     loading.value = false
   }
 }
@@ -137,7 +140,7 @@ function openDialog(item) {
   if (item) {
     editingId.value = item.id
     let parsed = {}
-    try { parsed = JSON.parse(item.config || '{}') } catch {}
+    try { parsed = JSON.parse(item.config || '{}') } catch (e) { console.error('解析风格配置失败:', e) }
     Object.assign(form, {
       name: item.name,
       category: parsed.category || 'general',
@@ -214,12 +217,16 @@ async function handlePreviewUpload(file) {
 }
 
 async function handleDelete(item) {
-  await ElMessageBox.confirm(`确定删除风格「${item.name}」？`, '提示', { type: 'warning' })
   try {
+    await ElMessageBox.confirm(`确定删除风格「${item.name}」？`, '提示', { type: 'warning' })
     await deleteStyle(item.id)
     ElMessage.success('删除成功')
     fetchData()
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      console.error('删除风格失败:', e)
+    }
+  }
 }
 
 onMounted(fetchData)

@@ -1,0 +1,15 @@
+INFO:__main__:Model directory: F:\Stable\project01\sd-models
+INFO:     Started server process [13108]
+INFO:     Waiting for application startup.
+INFO:__main__:HF config cache ready for SD 1.5
+WARNING:__main__:Low memory: 7.8 GB free, model loading may be slow. Close other apps if possible.
+INFO:__main__:Warming up model: v1-5-pruned-emaonly.safetensors
+INFO:__main__:Loading model: v1-5-pruned-emaonly.safetensors
+INFO:__main__:Detected SD 1.5 model, using StableDiffusionPipeline
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]Some weights of the model checkpoint were not used when initializing CLIPTextModel: 
+ ['text_model.embeddings.position_ids']
+Loading pipeline components...:  50%|¨€¨€¨€¨€¨€     | 3/6 [00:00<00:00,  3.34it/s]Loading pipeline components...:  67%|¨€¨€¨€¨€¨€¨€¨ƒ   | 4/6 [00:01<00:00,  4.23it/s]Loading pipeline components...:  83%|¨€¨€¨€¨€¨€¨€¨€¨€¨† | 5/6 [00:04<00:01,  1.32s/it]Loading pipeline components...: 100%|¨€¨€¨€¨€¨€¨€¨€¨€¨€¨€| 6/6 [00:05<00:00,  1.04s/it]Loading pipeline components...: 100%|¨€¨€¨€¨€¨€¨€¨€¨€¨€¨€| 6/6 [00:05<00:00,  1.18it/s]
+INFO:__main__:Model loaded successfully on cuda: v1-5-pruned-emaonly.safetensors
+INFO:__main__:Model warmup complete on NVIDIA GeForce RTX 4060 Laptop GPU
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)

@@ -39,25 +39,9 @@
             <el-input v-model="form['ai.qwen.model']" placeholder="qwen3.5-omni-plus" />
           </el-form-item>
 
-          <div class="section-title">存储配置</div>
-          <el-form-item label="MinIO 地址">
-            <el-input v-model="form['storage.minio.url']" />
-          </el-form-item>
-          <el-form-item label="MinIO 存储桶">
-            <el-input v-model="form['storage.minio.bucket']" />
-          </el-form-item>
-
           <div class="section-title">安全配置</div>
           <el-form-item label="JWT 过期时间(小时)">
             <el-input-number v-model="form['security.jwt.expire-hours']" :min="1" :max="720" />
-          </el-form-item>
-
-          <div class="section-title">训练配置</div>
-          <el-form-item label="默认训练轮数">
-            <el-input-number v-model="form['training.default.epochs']" :min="1" :max="100" />
-          </el-form-item>
-          <el-form-item label="默认批次大小">
-            <el-input-number v-model="form['training.default.batch-size']" :min="1" :max="64" />
           </el-form-item>
 
           <el-form-item>
@@ -90,11 +74,7 @@ const form = reactive({
   'ai.qwen.api-key': '',
   'ai.qwen.api-url': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
   'ai.qwen.model': 'qwen3.5-omni-plus',
-  'storage.minio.url': 'http://localhost:9000',
-  'storage.minio.bucket': 'ai-content',
-  'security.jwt.expire-hours': '24',
-  'training.default.epochs': '10',
-  'training.default.batch-size': '8'
+  'security.jwt.expire-hours': '24'
 })
 
 async function fetchConfigs() {
@@ -107,7 +87,10 @@ async function fetchConfigs() {
         form[r.configKey] = r.configValue
       }
     })
-  } catch {} finally {
+  } catch (e) {
+    console.error('加载系统配置失败:', e)
+    ElMessage.error('加载系统配置失败')
+  } finally {
     loading.value = false
   }
 }

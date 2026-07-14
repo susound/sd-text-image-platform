@@ -39,7 +39,7 @@ if %errorlevel%==0 (
 
 :: ---------- 3. 登录接口测试 ----------
 echo [3/4] 登录接口测试 (POST /api/auth/login)...
-curl -s -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"admin@nebula.studio\",\"password\":\"admin123\"}" > "%PROJECT_DIR%login_resp.json" 2>nul
+curl -s -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"admin@nebula.com\",\"password\":\"admin123\"}" > "%PROJECT_DIR%login_resp.json" 2>nul
 if exist "%PROJECT_DIR%login_resp.json" (
     findstr /C:"token" "%PROJECT_DIR%login_resp.json" >nul 2>&1
     if %errorlevel%==0 (

@@ -2,7 +2,6 @@
 ComfyUI_windows_portable_nvidia_cu126/
 
 # SD Models (7.7GB - too large for git)
-project01/sd-models/
 sd-models/
 
 # Python
@@ -15,8 +14,6 @@ __pycache__/
 
 # Node
 node_modules/
-project01/frontend/node_modules/
-project01/node_modules/
 
 # Maven build
 project01/backend/target/
@@ -32,14 +29,17 @@ project01/frontend/dist/
 
 # Logs
 *.log
-project01/inference-service/*.log
 
 # H2 Database
 project01/backend/data/*.mv.db
 project01/backend/data/*.trace.db
 
 # AI tool sessions
+.omo/
 project01/.aionrs/
+
+# Build artifacts (root level)
+project01/backend/*.jar
 
 # Maven source (users install maven themselves)
 project01/apache-maven-3.9.15-src/

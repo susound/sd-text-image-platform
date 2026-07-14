@@ -5,13 +5,6 @@
  * @author 朱逸晨
 -->
 
-<!--
- * 文生图页面 —— 专业版创作面板
- * 提供全部可调参数（提示词/宽度/高度/步数/CFG/采样器/种子）
- * 含实时进度条（扩散步数/速度/剩余时间）
- * @author 朱逸晨
--->
-
 <template>
   <div class="text2image-page">
     <AiStatusBar :hide-i2-t="true" />
@@ -356,6 +349,10 @@ function startPolling(taskId) {
     try {
       const res = await getText2ImageProgress(taskId)
       const data = res.data || {}
+      if (data.finished) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
       t2iProgress.value = {
         step: data.step || 0,
         totalSteps: data.totalSteps || 30,
@@ -364,7 +361,9 @@ function startPolling(taskId) {
         finished: data.finished || false,
         percent: Math.round(((data.step || 0) / (data.totalSteps || 30)) * 100)
       }
-    } catch {}
+    } catch (e) {
+      console.error('轮询进度失败:', e)
+    }
   }, 300)
 }
 
@@ -389,12 +388,6 @@ function getAccuracyClass(accuracy) {
   return 'acc-low'
 }
 
-function getAccuracyColor(accuracy) {
-  if (accuracy == null) return '#909399'
-  if (accuracy >= 80) return '#67c23a'
-  if (accuracy >= 60) return '#e6a23c'
-  return '#f56c6c'
-}
 </script>
 
 <style scoped>

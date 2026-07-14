@@ -17,15 +17,11 @@ import com.nebula.studio.service.ImageRecordService;
 import com.nebula.studio.service.StyleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -36,12 +32,6 @@ public class ImageRecordServiceImpl extends ServiceImpl<ImageRecordMapper, Image
     private final FileStorageService fileStorageService;
     private final AiProviderManager providerManager;
     private final ObjectMapper objectMapper;
-
-    private final OkHttpClient downloadClient = new OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .build();
 
     @Override
     public ImageRecord text2Image(Long userId, Text2ImageRequest request) {
@@ -57,6 +47,12 @@ public class ImageRecordServiceImpl extends ServiceImpl<ImageRecordMapper, Image
         save(record);
 
         Text2ImageProvider provider = providerManager.getText2ImageProvider();
+        if (provider == null) {
+            record.setStatus("FAILED");
+            record.setOutputContent("文生图服务未配置");
+            updateById(record);
+            return record;
+        }
         log.info("文生图使用提供商: {}, 可用: {}", provider.getProviderName(), provider.isAvailable());
 
         Text2ImageResult result = provider.generate(request, prompt);
@@ -68,13 +64,7 @@ public class ImageRecordServiceImpl extends ServiceImpl<ImageRecordMapper, Image
                     String filename = result.getProviderName() + "_" + result.getSeed() + ".png";
                     imageUrl = fileStorageService.store(result.getImageData(), "text2image", filename);
                 } else if (StringUtils.hasText(result.getImageUrl())) {
-                    byte[] downloaded = downloadImage(result.getImageUrl());
-                    if (downloaded != null && downloaded.length > 0) {
-                        String filename = result.getProviderName() + "_" + result.getSeed() + ".png";
-                        imageUrl = fileStorageService.store(downloaded, "text2image", filename);
-                    } else {
-                        imageUrl = result.getImageUrl();
-                    }
+                    imageUrl = result.getImageUrl();
                 } else {
                     imageUrl = "/generated/error.png";
                 }
@@ -214,6 +204,12 @@ public class ImageRecordServiceImpl extends ServiceImpl<ImageRecordMapper, Image
         save(record);
 
         Image2TextProvider provider = providerManager.getImage2TextProvider();
+        if (provider == null) {
+            record.setStatus("FAILED");
+            record.setOutputContent("图生文服务未配置");
+            updateById(record);
+            return record;
+        }
         log.info("图生文使用提供商: {}, 可用: {}", provider.getProviderName(), provider.isAvailable());
 
         try {
@@ -310,17 +306,4 @@ public class ImageRecordServiceImpl extends ServiceImpl<ImageRecordMapper, Image
         }
     }
 
-    private byte[] downloadImage(String url) {
-        try {
-            Request request = new Request.Builder().url(url).get().build();
-            try (Response response = downloadClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    return response.body().bytes();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("下载图片失败: {}", e.getMessage());
-        }
-        return null;
-    }
 }

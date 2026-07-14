@@ -14,7 +14,7 @@ echo.
 :: ============================================================
 :: Phase 1 - Cleanup
 :: ============================================================
-echo   [1/5] Stopping old instances...
+echo   [1/4] Stopping old instances...
 
 call :kill_port 5000
 call :kill_port 8080
@@ -27,7 +27,7 @@ echo         Done.
 :: Phase 2 - Inference Service (5000)
 :: ============================================================
 echo.
-echo   [2/5] Inference Service ^(5000^)
+echo   [2/4] Inference Service ^(5000^)
 
 if not exist "%ROOT%inference-service\main.py" (
     echo         SKIP: inference-service\main.py not found
@@ -36,23 +36,34 @@ if not exist "%ROOT%inference-service\main.py" (
 
 cd /d "%ROOT%inference-service"
 
-echo         Checking dependencies (torch ~2.5GB, one-time download)...
-call pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+:: Check if torch is already installed (skip if yes)
+python -c "import torch; exit(0)" >nul 2>&1
 if !errorlevel! neq 0 (
-    echo         WARN: torch install failed, retrying once...
-    call pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+    echo         Installing PyTorch ^(CUDA, ~2.5GB - may take a while^)...
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+    if !errorlevel! neq 0 (
+        echo         WARN: CUDA torch install failed, falling back to CPU...
+        pip install torch torchvision torchaudio
+    )
+) else (
+    echo         PyTorch already installed
 )
-call pip install -r requirements.txt
+pip install -r requirements.txt >nul 2>&1
+echo         Dependencies ready
 
-    echo         Launching...
+echo         Launching...
 start "InferenceService" /D "%ROOT%inference-service" cmd /c "set CUDA_LAUNCH_BLOCKING=1 && python main.py"
 
-echo         Loading model to GPU (7.7 GB, may take 2-5 min)...
-call :wait "http://127.0.0.1:5000/health" 300
+echo         Loading model to GPU (may take 2-5 min on first run)...
+echo         (check progress at http://127.0.0.1:5000/health)
+echo         Waiting up to 300s, first check after 15s...
+ping -n 16 127.0.0.1 >nul
+call :wait "http://127.0.0.1:5000/health" 285
 if !errorlevel! equ 0 (
     echo         READY
 ) else (
-    echo         TIMEOUT - check http://127.0.0.1:5000/health
+    echo         WARN: Not ready yet ^(can be slow on first load^)
+    echo         Run "stop.bat" if it fails, then start again
 )
 
 :: ============================================================
@@ -60,7 +71,7 @@ if !errorlevel! equ 0 (
 :: ============================================================
 :backend
 echo.
-echo   [3/5] Backend ^(8080^)
+echo   [3/4] Backend ^(8080^)
 
 if not exist "%ROOT%backend\pom.xml" (
     echo         SKIP: backend\pom.xml not found
@@ -73,19 +84,19 @@ set "JAR="
 for %%f in (target\*.jar) do if not "%%~nxf"=="original-*" set "JAR=%%f"
 
 if defined JAR (
-    echo         Starting from JAR: !JAR!...
+    echo         Starting from JAR...
     start "Nebula-Backend" /D "%ROOT%backend" java -jar "%ROOT%backend\!JAR!" --spring.profiles.active=h2
 ) else (
-    echo         No JAR found, starting from Maven ^(slower^)...
+    echo         Building and starting from Maven...
     start "Nebula-Backend" /D "%ROOT%backend" cmd /c "mvn spring-boot:run -Dspring-boot.run.profiles=h2"
 )
 
 echo         Waiting (Spring Boot startup, ~30-90s)...
-call :wait "http://localhost:8080" 180
+call :wait "http://localhost:8080" 120
 if !errorlevel! equ 0 (
     echo         READY
 ) else (
-    echo         TIMEOUT - check http://localhost:8080
+    echo         WARN: Backend not yet ready
 )
 
 :: ============================================================
@@ -93,7 +104,7 @@ if !errorlevel! equ 0 (
 :: ============================================================
 :frontend
 echo.
-echo   [4/5] Frontend ^(3000^)
+echo   [4/4] Frontend ^(3000^)
 
 if not exist "%ROOT%frontend\package.json" (
     echo         SKIP: frontend\package.json not found
@@ -114,14 +125,16 @@ call :wait "http://localhost:3000" 45
 if !errorlevel! equ 0 (
     echo         READY
 ) else (
-    echo         TIMEOUT - check http://localhost:3000
+    echo         WARN: Frontend not yet available
 )
 
 :: ============================================================
-:: Phase 5 - Summary
+:: Summary
 :: ============================================================
 :done
 echo.
+echo   =============================================
+echo     All services started
 echo   =============================================
 echo     Inference      http://127.0.0.1:5000/health
 echo     Backend API    http://localhost:8080
@@ -130,36 +143,39 @@ echo.
 echo     Login:         admin@nebula.com / admin123
 echo   =============================================
 echo.
-echo   All done. Press any key to close.
-pause >nul
+echo  Press any key to close this window (services keep running).
+echo  Or close all services with: stop.bat
+echo.
+pause
 exit /b 0
 
 :: ============================================================
-:: Functions
+:: Helper: Wait for URL
 :: ============================================================
-
 :wait
-:: args: URL, timeout_seconds
-:: returns: 0 if URL responds within timeout, 1 otherwise
 setlocal
 set "url=%~1"
 set "max=%~2"
 set "elapsed=0"
 :wait_poll
-curl -s --connect-timeout 3 --max-time 5 -o nul "%url%" 2>nul
-if !errorlevel! equ 0 exit /b 0
-<nul set /p ="."
-timeout /t 3 /nobreak >nul
+curl -s --connect-timeout 3 --max-time 5 "%url%" >"%TEMP%\hc.txt" 2>&1
+if !errorlevel! equ 0 (
+    del "%TEMP%\hc.txt" 2>nul
+    exit /b 0
+)
+del "%TEMP%\hc.txt" 2>nul
+ping -n 4 127.0.0.1 >nul
 set /a elapsed+=3
 if !elapsed! lss !max! goto wait_poll
-echo.
 exit /b 1
 
+:: ============================================================
+:: Helper: Kill by port
+:: ============================================================
 :kill_port
-:: args: port_number
 setlocal
 set "port=%~1"
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":%port% " ^| findstr /c:"LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":%port% "') do (
     taskkill /f /pid %%a >nul 2>&1
 )
 exit /b 0

@@ -85,7 +85,9 @@ async function fetchData() {
     const res = await getText2ImageHistory({ page: page.value, size: size.value, keyword: search.value })
     records.value = res.data.records || []
     total.value = res.data.total || 0
-  } catch {} finally {
+  } catch (e) {
+    console.error('加载文生图历史失败:', e)
+  } finally {
     loading.value = false
   }
 }
@@ -96,12 +98,16 @@ function viewDetail(row) {
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm('确定删除该记录？', '提示', { type: 'warning' })
   try {
+    await ElMessageBox.confirm('确定删除该记录？', '提示', { type: 'warning' })
     await deleteText2ImageRecord(row.id)
     ElMessage.success('删除成功')
     fetchData()
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      console.error('删除文生图记录失败:', e)
+    }
+  }
 }
 
 onMounted(fetchData)

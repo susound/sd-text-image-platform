@@ -102,6 +102,7 @@ onUnmounted(() => {
 })
 
 function handleFileChange(uploadFile) {
+  if (!uploadFile.raw) return
   file.value = uploadFile.raw
   if (previewUrl.value) {
     URL.revokeObjectURL(previewUrl.value)

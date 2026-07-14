@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Slf4j
@@ -27,8 +29,36 @@ public class ModelController {
             return Result.success(models);
         }
         scanDirectory(dir, models);
+        // Filter out SD3 models (gated repo, not usable without HF auth)
+        models.removeIf(m -> {
+            String type = detectModelType((String) m.get("filepath"));
+            return "sd3".equals(type);
+        });
         models.sort(Comparator.comparing(m -> (String) m.get("name")));
         return Result.success(models);
+    }
+
+    private String detectModelType(String filepath) {
+        try (RandomAccessFile raf = new RandomAccessFile(filepath, "r")) {
+            byte[] lenBytes = new byte[8];
+            raf.read(lenBytes);
+            long headerLen = 0;
+            for (int i = 0; i < 8; i++) {
+                headerLen |= ((long) (lenBytes[i] & 0xFF)) << (8 * i);
+            }
+            byte[] headerBytes = new byte[(int) headerLen];
+            raf.read(headerBytes);
+            String header = new String(headerBytes, StandardCharsets.UTF_8);
+            if (header.contains("joint_blocks") || header.contains("x_embedder")) {
+                return "sd3";
+            }
+            if (header.contains("\"conditioner.")) {
+                return "sdxl";
+            }
+            return "sd15";
+        } catch (Exception e) {
+            return "sd15";
+        }
     }
 
     private void scanDirectory(File dir, List<Map<String, Object>> models) {
@@ -43,6 +73,7 @@ public class ModelController {
                 String name = filename.substring(0, filename.lastIndexOf('.'));
                 model.put("name", name);
                 model.put("filename", filename);
+                model.put("filepath", file.getName());
                 model.put("sizeMb", Math.round(file.length() / (1024.0 * 1024.0) * 100.0) / 100.0);
                 model.put("size", file.length());
                 models.add(model);

@@ -75,16 +75,8 @@ public class AuditLogAspect {
         String className = joinPoint.getSignature().getDeclaringTypeName();
         // 提取简单类名
         String simpleName = className.substring(className.lastIndexOf('.') + 1);
-        // AdminUserController -> USER
         if (simpleName.startsWith("Admin") && simpleName.contains("Controller")) {
             String entity = simpleName.substring(5).replace("Controller", "").toUpperCase();
-            if (entity.contains("USER")) return "USER";
-            if (entity.contains("STYLE")) return "STYLE";
-            if (entity.contains("IMAGE")) return "IMAGE";
-            if (entity.contains("CONFIG")) return "CONFIG";
-            if (entity.contains("LOG")) return "LOG";
-            if (entity.contains("MODEL")) return "MODEL";
-            if (entity.contains("TASK")) return "TASK";
             return entity;
         }
         // 非 Admin 前缀的 Controller（如 StyleController）

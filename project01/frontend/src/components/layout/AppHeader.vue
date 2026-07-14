@@ -36,8 +36,6 @@ function handleCommand(command) {
     userStore.logout()
   } else if (command === 'profile') {
     router.push('/password')
-  } else if (command === 'password') {
-    router.push('/password')
   }
 }
 </script>

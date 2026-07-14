@@ -21,7 +21,7 @@ public class AiProviderManager {
     public AiProviderManager(List<Text2ImageProvider> text2ImageProviders,
                              List<Image2TextProvider> image2TextProviders,
                              @Value("${ai.text2image.provider:local-model}") String activeText2ImageProvider,
-                             @Value("${ai.image2text.provider:mock}") String activeImage2TextProvider) {
+                             @Value("${ai.image2text.provider:qwen}") String activeImage2TextProvider) {
         this.text2ImageProviders = text2ImageProviders;
         this.image2TextProviders = image2TextProviders;
         this.activeText2ImageProvider = activeText2ImageProvider;

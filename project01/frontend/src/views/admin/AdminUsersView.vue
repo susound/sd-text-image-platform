@@ -123,7 +123,10 @@ async function fetchData() {
     const res = await getUserList({ page: page.value, size: size.value, keyword: search.value, role: roleFilter.value })
     users.value = res.data.records || []
     total.value = res.data.total || 0
-  } catch {} finally {
+  } catch (e) {
+    console.error('加载用户列表失败:', e)
+    ElMessage.error('加载用户列表失败')
+  } finally {
     loading.value = false
   }
 }
@@ -160,18 +163,25 @@ async function handleSave() {
     }
     dialogVisible.value = false
     fetchData()
-  } catch {} finally {
+  } catch (e) {
+    console.error('保存用户失败:', e)
+    ElMessage.error('保存失败')
+  } finally {
     saving.value = false
   }
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(`确定删除用户「${row.username}」？`, '提示', { type: 'warning' })
   try {
+    await ElMessageBox.confirm(`确定删除用户「${row.username}」？`, '提示', { type: 'warning' })
     await deleteUser(row.id)
     ElMessage.success('删除成功')
     fetchData()
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      console.error('删除用户失败:', e)
+    }
+  }
 }
 
 onMounted(fetchData)

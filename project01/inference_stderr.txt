@@ -1,0 +1,8 @@
+INFO:__main__:Model directory: F:\Stable\project01\sd-models
+INFO:     Started server process [23412]
+INFO:     Waiting for application startup.
+INFO:__main__:HF config cache ready for SD 1.5
+WARNING:__main__:Low memory: 7.4 GB free, model loading may be slow. Close other apps if possible.
+INFO:__main__:Warming up model: v1-5-pruned-emaonly.safetensors
+INFO:__main__:Loading model: v1-5-pruned-emaonly.safetensors
+INFO:__main__:Detected SD 1.5 model, using StableDiffusionPipeline

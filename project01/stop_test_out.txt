@@ -1,6 +1,0 @@
-============================================
-  Nebula Studio - Stop All Services
-============================================
-
-[*] Inference Service (5000)...
-  Killing PID 23672 on port 5000

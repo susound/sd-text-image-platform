@@ -13,10 +13,10 @@ import io
 import glob
 import time
 import base64
+import json
 import logging
 import threading
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional
 
 os.environ.setdefault("CUDA_LAUNCH_BLOCKING", "1")
@@ -25,8 +25,7 @@ import torch
 from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import safetensors
+from pydantic import BaseModel, Field, ConfigDict
 from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline, DPMSolverMultistepScheduler, \
     EulerDiscreteScheduler, EulerAncestralDiscreteScheduler, DDIMScheduler, UniPCMultistepScheduler
 
@@ -51,16 +50,18 @@ _pipeline_lock = threading.Lock()
 
 
 class GenerateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     prompt: str
-    negative_prompt: str = ""
+    negative_prompt: str = Field(default="", alias="negativePrompt")
     width: int = Field(default=512, ge=256, le=2048)
     height: int = Field(default=512, ge=256, le=2048)
     steps: int = Field(default=20, ge=1, le=150)
-    cfg_scale: float = Field(default=7.5, ge=1.0, le=30.0)
+    cfg_scale: float = Field(default=7.5, ge=1.0, le=30.0, alias="cfgScale")
     seed: Optional[int] = None
-    sampler_name: Optional[str] = None
-    checkpoint_name: Optional[str] = None
-    task_id: Optional[str] = None
+    sampler_name: Optional[str] = Field(default=None, alias="samplerName")
+    checkpoint_name: Optional[str] = Field(default=None, alias="checkpointName")
+    task_id: Optional[str] = Field(default=None, alias="taskId")
 
 
 _progress_store: dict = {}
@@ -85,7 +86,6 @@ class GenerateResponse(BaseModel):
 class ModelInfo(BaseModel):
     name: str
     filename: str
-    path: str
     size_mb: float
 
 
@@ -93,7 +93,7 @@ def scan_models():
     models = []
     if not os.path.isdir(MODEL_DIR):
         return models
-    for ext in ("*.safetensors",):
+    for ext in ["*.safetensors"]:
         for filepath in glob.glob(os.path.join(MODEL_DIR, "**", ext), recursive=True):
             filename = os.path.basename(filepath)
             name = os.path.splitext(filename)[0]
@@ -101,19 +101,37 @@ def scan_models():
             models.append(ModelInfo(
                 name=name,
                 filename=filename,
-                path=filepath,
                 size_mb=round(size_mb, 2)
             ))
+    # Filter out SD3 models (gated repo, requires HF auth — not usable in current network)
+    model_types = {}
+    for m in models:
+        model_path = os.path.join(MODEL_DIR, m.filename)
+        try:
+            model_types[m.filename] = _detect_model_type(model_path)
+        except Exception:
+            model_types[m.filename] = "sd15"
+    models = [m for m in models if model_types.get(m.filename, "sd15") != "sd3"]
+    # Sort: SD 1.5 first (fastest, default), then SDXL
+    type_priority = {"sd15": 0, "sdxl": 1}
+    models.sort(key=lambda m: (type_priority.get(model_types.get(m.filename, "sd15"), 0), m.name))
     return models
 
 
 def _detect_model_type(model_path: str) -> str:
-    """Detect model architecture from checkpoint file.
-    Returns 'sdxl' for SDXL/SSD-1B (conditioner prefix), 'sd15' for SD 1.5."""
+    """Detect model architecture from checkpoint file header (fast, no tensor load).
+    Returns 'sdxl' for SDXL/SSD-1B, 'sd3' for SD3/MMDiT, 'sd15' for SD 1.5."""
     try:
-        sd = safetensors.torch.load_file(model_path, device="cpu")
-        # SDXL/SSD-1B checkpoints use 'conditioner' prefix for text encoders
-        for k in sd:
+        with open(model_path, "rb") as f:
+            header_len = int.from_bytes(f.read(8), "little")
+            header_data = f.read(header_len)
+        import json
+        keys = json.loads(header_data).keys()
+        for k in keys:
+            # SD3/MMDiT: joint transformer blocks, patch embedding
+            if "model.diffusion_model.joint_blocks" in k or "model.diffusion_model.x_embedder" in k:
+                return "sd3"
+            # SDXL/SSD-1B: conditioner prefixed text encoders
             if k.startswith("conditioner."):
                 return "sdxl"
         return "sd15"
@@ -149,24 +167,25 @@ def get_pipeline(checkpoint_name: Optional[str]):
         target_model = models[0]
 
     with _pipeline_lock:
-        if current_pipeline is not None and current_checkpoint == target_model.path:
+        model_path = os.path.join(MODEL_DIR, target_model.filename)
+        if current_pipeline is not None and current_checkpoint == model_path:
             return current_pipeline
 
-        logger.info(f"Loading model: {target_model.filename} from {target_model.path}")
+        logger.info(f"Loading model: {target_model.filename}")
 
         if current_pipeline is not None:
             del current_pipeline
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        model_type = _detect_model_type(target_model.path)
+        model_type = _detect_model_type(model_path)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
 
         if model_type == "sdxl":
             logger.info(f"Detected SDXL/SSD-1B model, using StableDiffusionXLPipeline")
             pipe = StableDiffusionXLPipeline.from_single_file(
-                target_model.path,
+                model_path,
                 torch_dtype=dtype,
                 safety_checker=None,
                 requires_safety_checker=False,
@@ -176,7 +195,7 @@ def get_pipeline(checkpoint_name: Optional[str]):
             logger.info(f"Detected SD 1.5 model, using StableDiffusionPipeline")
             try:
                 pipe = StableDiffusionPipeline.from_single_file(
-                    target_model.path,
+                    model_path,
                     torch_dtype=dtype,
                     safety_checker=None,
                     requires_safety_checker=False,
@@ -184,7 +203,7 @@ def get_pipeline(checkpoint_name: Optional[str]):
             except Exception as e:
                 logger.warning(f"First load attempt failed ({e}), retrying with hub download...")
                 pipe = StableDiffusionPipeline.from_single_file(
-                    target_model.path,
+                    model_path,
                     torch_dtype=dtype,
                     safety_checker=None,
                     requires_safety_checker=False,
@@ -194,19 +213,20 @@ def get_pipeline(checkpoint_name: Optional[str]):
             if device == "cuda":
                 pipe.enable_attention_slicing()
 
-            # Fix: from_single_file may misidentify SD 1.5 as SDXL
             if getattr(pipe.unet.config, "addition_embed_type", None) == "text_time":
                 pipe.unet.config.addition_embed_type = None
                 logger.info("Fixed UNet addition_embed_type: text_time -> None (SD 1.5 compat)")
 
         current_pipeline = pipe
-        current_checkpoint = target_model.path
+        current_checkpoint = model_path
         logger.info(f"Model loaded successfully on {device}: {target_model.filename}")
         return pipe
 
 
 def get_scheduler(sampler_name: Optional[str]):
     if not sampler_name or sampler_name not in SAMPLER_MAP:
+        if sampler_name:
+            logger.warning(f"Unknown sampler: {sampler_name}, using pipeline default")
         return None
     scheduler_cls = SAMPLER_MAP[sampler_name]
     if callable(scheduler_cls) and not isinstance(scheduler_cls, type):
@@ -267,7 +287,6 @@ def health():
     models = scan_models()
     return {
         "status": "ok",
-        "model_dir": MODEL_DIR,
         "models_count": len(models),
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "current_model": os.path.basename(current_checkpoint) if current_checkpoint else None
@@ -314,20 +333,24 @@ def generate(req: GenerateRequest):
                 "total_steps": req.steps,
                 "elapsed": 0.0,
                 "its": 0.0,
-                "finished": False
+                "finished": False,
+                "_started": time.time()
             }
             start_time = time.time()
 
             def callback_on_step_end(pipeline, step, timestep, callback_kwargs):
-                elapsed = time.time() - start_time
-                its = (step + 1) / elapsed if elapsed > 0 else 0.0
-                _progress_store[task_id] = {
-                    "step": step + 1,
-                    "total_steps": req.steps,
-                    "elapsed": elapsed,
-                    "its": its,
-                    "finished": False
-                }
+                try:
+                    elapsed = time.time() - start_time
+                    its = (step + 1) / elapsed if elapsed > 0 else 0.0
+                    _progress_store[task_id] = {
+                        "step": step + 1,
+                        "total_steps": req.steps,
+                        "elapsed": elapsed,
+                        "its": its,
+                        "finished": False
+                    }
+                except Exception as e:
+                    logger.error(f"Progress callback error: {e}")
                 return callback_kwargs
 
             generate_kwargs["callback_on_step_end"] = callback_on_step_end
@@ -349,7 +372,8 @@ def generate(req: GenerateRequest):
                 "total_steps": req.steps,
                 "elapsed": elapsed,
                 "its": its,
-                "finished": True
+                "finished": True,
+                "_started": _progress_store[task_id].get("_started", time.time())
             }
 
         return GenerateResponse(
@@ -373,17 +397,30 @@ def generate(req: GenerateRequest):
 @app.get("/progress/{task_id}")
 def get_progress(task_id: str):
     if task_id not in _progress_store:
-        return {"task_id": task_id, "step": 0, "total_steps": 30, "elapsed": 0, "its": 0, "finished": False}
-    p = _progress_store[task_id]
-    if p["finished"]:
-        del _progress_store[task_id]
-    return p
+        raise HTTPException(status_code=404, detail="Unknown task_id")
+    return _progress_store[task_id]
 
 
+def _cleanup_stale_progress():
+    now = time.time()
+    stale = [tid for tid, p in list(_progress_store.items())
+             if now - p.get("_started", now) > 300]
+    for tid in stale:
+        del _progress_store[tid]
+
+
+def _cleanup_loop():
+    while True:
+        time.sleep(30)
+        _cleanup_stale_progress()
 
 
 if __name__ == "__main__":
     import uvicorn
     os.makedirs(MODEL_DIR, exist_ok=True)
+    t = threading.Thread(target=_cleanup_loop, daemon=True)
+    t.start()
     logger.info(f"Model directory: {MODEL_DIR}")
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run(app, host=host, port=port)

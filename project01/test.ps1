@@ -77,7 +77,7 @@ try {
 Write-Host "[4/6] 登录接口测试..." -ForegroundColor Yellow
 $script:Token = $null
 try {
-    $loginBody = @{ email = 'admin@nebula.studio'; password = 'admin123' } | ConvertTo-Json
+    $loginBody = @{ email = 'admin@nebula.com'; password = 'admin123' } | ConvertTo-Json
     $loginResp = Invoke-RestMethod -Uri "$BackendUrl/api/auth/login" -Method POST -ContentType 'application/json' -Body $loginBody
     if ($loginResp.data.token) {
         $script:Token = $loginResp.data.token

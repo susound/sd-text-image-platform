@@ -16,7 +16,7 @@ call :kill_port 5000
 echo [*] Backend (8080)...
 call :kill_port 8080
 taskkill /FI "IMAGENAME eq java.exe" /F >nul 2>&1
-del /f "%ROOT%backend\data\nebula_studio.lock.db" 2>nul
+del /f "%ROOT%backend\data\nebula_studio.lock.db" 2>nul 2>&1
 
 echo [*] Frontend (3000)...
 call :kill_port 3000
@@ -33,20 +33,18 @@ echo.
 echo ============================================
 echo   All services stopped.
 echo ============================================
-timeout /t 2 /nobreak >nul 2>&1
+timeout /t 2 /nobreak >nul
 exit /b 0
 
 :kill_port
 set "port=%~1"
 set "killed=0"
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":%port% " ^| findstr /c:"LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:":%port% "') do (
     echo   Killing PID %%a on port %port%
     taskkill /f /pid %%a >nul 2>&1
-    if not errorlevel 1 set /a killed+=1
+    set /a killed+=1
 )
-if not "!killed!"=="0" (
-    echo   Killed !killed! processes
-) else (
-    echo   No process found
+if "!killed!"=="0" (
+    echo   No process found on port %port%
 )
 exit /b 0

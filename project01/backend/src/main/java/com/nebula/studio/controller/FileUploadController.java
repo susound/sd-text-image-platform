@@ -23,7 +23,7 @@ public class FileUploadController {
     /**
      * 上传目录（绝对路径），默认在项目根目录下的 uploads 目录
      */
-    @Value("${file.upload-dir:uploads}")
+    @Value("${storage.local.path:./uploads}")
     private String uploadDir;
 
     /**
